@@ -1,6 +1,8 @@
 /* Classic content script — no import/export. Works with scripting.executeScript. */
 (function () {
-  if (window.__localAtsContentReady) return;
+  const BUILD = "0.2.1";
+  if (window.__localAtsBuild === BUILD) return;
+  window.__localAtsBuild = BUILD;
   window.__localAtsContentReady = true;
   window.__localAtsLoaded = true;
 
@@ -146,7 +148,7 @@
     return (2 * inter) / (A.size + B.size);
   }
 
-  function findMemoryAnswer(memory, question, threshold = 0.55) {
+  function findMemoryAnswer(memory, question, threshold = 0.72) {
     let best = null;
     let bestScore = 0;
     for (const entry of memory || []) {
@@ -605,9 +607,11 @@
 
   function ensurePanel() {
     let panel = document.getElementById("local-ats-panel");
-    if (panel) return panel;
+    if (panel && panel.dataset.atsBuild === BUILD) return panel;
+    if (panel) panel.remove();
     panel = document.createElement("div");
     panel.id = "local-ats-panel";
+    panel.dataset.atsBuild = BUILD;
     panel.innerHTML = `
       <div class="ats-head"><strong>Local ATS</strong>
         <button type="button" data-ats-action="close">×</button></div>
@@ -616,10 +620,13 @@
         <div class="ats-stats"></div>
         <div class="ats-actions">
           <button type="button" data-ats-action="fill">Fill form</button>
+          <button type="button" data-ats-action="teach" class="secondary">Teach unanswered</button>
+        </div>
+        <div class="ats-actions">
           <button type="button" data-ats-action="clear" class="secondary">Clear highlights</button>
         </div>
         <div id="ats-ask" class="ats-ask" hidden></div>
-        <p class="ats-hint">Review before submit. New questions appear below.</p>
+        <p class="ats-hint">After Fill, unanswered fields are asked one by one so you can teach the profile.</p>
       </div>`;
     document.documentElement.appendChild(panel);
     return panel;
@@ -763,6 +770,55 @@
 
   let running = false;
   let lastFieldMap = new Map();
+  let lastAts = "generic";
+
+  function toAskQuestion(field) {
+    return {
+      id: field.id,
+      label: field.label,
+      type: field.type === "textarea" ? "textarea" : field.type,
+      options: field.options || [],
+      required: field.required,
+      multi: !!field.multi || isMultiSelectQuestion(field.label, field.type)
+    };
+  }
+
+  function startTeaching(fields, ats, reason) {
+    const list = fields
+      .filter((f) => f.type !== "file")
+      .map(toAskQuestion);
+    list.sort((a, b) => Number(b.required) - Number(a.required));
+    const toAsk = list.slice(0, 30);
+    if (!toAsk.length) {
+      setStatus(reason || "Nothing to teach — no fields detected.");
+      return;
+    }
+    for (const field of fields) {
+      if (field.type !== "file") highlight(field.elements || field.el, "low");
+    }
+    setStatus(`Teach mode: ${toAsk.length} question(s). Answer one by one, then Save.`);
+    showPanel();
+    renderAskForm(toAsk, async (answers) => {
+      const entries = [];
+      let n = 0;
+      for (const ans of answers) {
+        const field = lastFieldMap.get(ans.id);
+        if (!field) continue;
+        let value = ans.value;
+        if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
+          value = pickOption(ans.value, field.options) || ans.value;
+        }
+        if (fillField(field, value, "memory")) n += 1;
+        entries.push({ question: field.label, answer: ans.value, fieldType: field.type, ats });
+      }
+      if (entries.length) {
+        await chrome.runtime.sendMessage({ type: "SAVE_MEMORY_BATCH", entries });
+        await chrome.runtime.sendMessage({ type: "SAVE_LEARNED_ANSWERS", entries });
+      }
+      clearAskForm();
+      setStatus(`Saved ${entries.length} answer(s) to answers.json, filled ${n} fields.`);
+    });
+  }
 
   async function fetchResumeFile() {
     const res = await chrome.runtime.sendMessage({ type: "GET_RESUME" });
@@ -793,13 +849,20 @@
       const memory = state.memory || [];
       const settings = state.settings || {};
       const ats = detectAts();
+      lastAts = ats;
       const job = extractJobContext();
       if (pageSalaryMin) job.salaryMinFromPage = pageSalaryMin;
-      const fields = scanFields();
+
+      // Ashby fields can mount late
+      let fields = scanFields();
+      for (let i = 0; i < 4 && fields.length < 3; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        fields = scanFields();
+      }
       lastFieldMap = new Map(fields.map((f) => [f.id, f]));
 
       if (!fields.length) {
-        setStatus("No fillable fields found. Scroll to the form, then Fill again.");
+        setStatus("No fillable fields found. Scroll the form into view, then Fill or Teach.");
         setStats({ total: 0, filled: 0, memory: 0, llm: 0, skipped: 0 });
         return;
       }
@@ -810,6 +873,7 @@
       let llmHits = 0;
       const pending = [];
       const learned = [];
+      const resolvedIds = new Set();
 
       setStatus("Uploading resume…");
       const fileFields = fields.filter((f) => f.type === "file");
@@ -818,7 +882,12 @@
         const resume = await fetchResumeFile();
         if (resume.ok) {
           let n = 0;
-          for (const f of fileFields) if (fillFile(f.el, resume.file)) n += 1;
+          for (const f of fileFields) {
+            if (fillFile(f.el, resume.file)) {
+              n += 1;
+              resolvedIds.add(f.id);
+            }
+          }
           filled += n;
           resumeLabel = n ? `uploaded ${resume.fileName}` : "upload failed";
         } else resumeLabel = "missing in data/me";
@@ -827,57 +896,74 @@
       setStatus(`Pass 1: local rules (${fields.length} fields)…`);
       for (const field of fields) {
         if (field.type === "file") continue;
+
+        let handled = false;
         const mem = findMemoryAnswer(memory, field.label);
         if (mem?.answer) {
           let value = mem.answer;
           if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
             value = pickOption(mem.answer, field.options) || mem.answer;
           }
-          if (fillField(field, value, "memory")) {
+          if (fillField(field, value, "memory") && !isEmpty(field)) {
             filled += 1;
             memoryHits += 1;
-            continue;
+            resolvedIds.add(field.id);
+            handled = true;
           }
         }
-        const mapped = mapFieldLocally(field.label, facts, field.options);
-        if (mapped?.value && fillField(field, mapped.value, levelFromConfidence(mapped.confidence, "rule"))) {
-          filled += 1;
-          continue;
+
+        if (!handled) {
+          const mapped = mapFieldLocally(field.label, facts, field.options);
+          if (mapped?.value && (mapped.confidence || 0) >= 0.8) {
+            if (fillField(field, mapped.value, levelFromConfidence(mapped.confidence, "rule")) && !isEmpty(field)) {
+              filled += 1;
+              resolvedIds.add(field.id);
+              handled = true;
+            }
+          }
         }
-        pending.push({
-          id: field.id,
-          label: field.label,
-          type: field.type,
-          required: field.required,
-          options: field.options || [],
-          multi: !!field.multi
-        });
+
+        if (!handled) {
+          pending.push({
+            id: field.id,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+            options: field.options || [],
+            multi: !!field.multi
+          });
+        }
       }
 
       if (pending.length && settings.llmProvider !== "off") {
         setStatus(`Pass 2: LLM for ${pending.length} fields…`);
-        const llmRes = await chrome.runtime.sendMessage({
-          type: "LLM_FILL",
-          payload: { fields: pending, facts, job, ats, settings }
-        });
-        if (llmRes?.ok) {
-          const byId = Object.fromEntries((llmRes.answers || []).map((a) => [a.id, a]));
-          for (const field of fields) {
-            if (field.type === "file" || !isEmpty(field)) continue;
-            const ans = byId[field.id];
-            if (!ans?.value) continue;
-            let value = ans.value;
-            if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
-              value = pickOption(ans.value, field.options) || ans.value;
+        try {
+          const llmRes = await chrome.runtime.sendMessage({
+            type: "LLM_FILL",
+            payload: { fields: pending, facts, job, ats, settings }
+          });
+          if (llmRes?.ok) {
+            const byId = Object.fromEntries((llmRes.answers || []).map((a) => [a.id, a]));
+            for (const field of fields) {
+              if (field.type === "file" || resolvedIds.has(field.id)) continue;
+              const ans = byId[field.id];
+              if (!ans?.value) continue;
+              let value = ans.value;
+              if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
+                value = pickOption(ans.value, field.options) || ans.value;
+              }
+              if (fillField(field, value, levelFromConfidence(ans.confidence ?? 0.7, "llm")) && !isEmpty(field)) {
+                filled += 1;
+                llmHits += 1;
+                resolvedIds.add(field.id);
+                learned.push({ question: field.label, answer: String(ans.value), fieldType: field.type, ats });
+              }
             }
-            if (fillField(field, value, levelFromConfidence(ans.confidence ?? 0.7, "llm"))) {
-              filled += 1;
-              llmHits += 1;
-              learned.push({ question: field.label, answer: String(ans.value), fieldType: field.type, ats });
-            }
+          } else {
+            setStatus(`LLM failed: ${llmRes?.error || "unknown"}. Asking you the rest.`);
           }
-        } else {
-          setStatus(`LLM failed: ${llmRes?.error || "unknown"}. Will ask you the rest.`);
+        } catch (llmErr) {
+          setStatus(`LLM error: ${llmErr.message || llmErr}. Asking you the rest.`);
         }
       }
 
@@ -886,60 +972,22 @@
         await chrome.runtime.sendMessage({ type: "SAVE_LEARNED_ANSWERS", entries: learned });
       }
 
-      const unanswered = fields
-        .filter((f) => f.type !== "file" && isEmpty(f))
-        .map((f) => ({
-          id: f.id,
-          label: f.label,
-          type: f.type === "textarea" ? "textarea" : f.type,
-          options: f.options || [],
-          required: f.required,
-          multi: !!f.multi || isMultiSelectQuestion(f.label, f.type)
-        }));
-      unanswered.sort((a, b) => Number(b.required) - Number(a.required));
-      for (const field of fields) {
-        if (field.type !== "file" && isEmpty(field) && field.required) highlight(field.elements || field.el, "low");
-      }
+      const unresolved = fields.filter((f) => f.type !== "file" && !resolvedIds.has(f.id));
+      for (const field of unresolved) highlight(field.elements || field.el, "low");
 
       setStats({
         filled,
         memory: memoryHits,
         llm: llmHits,
-        skipped: unanswered.length,
+        skipped: unresolved.length,
         total: fields.length,
         resume: resumeLabel
       });
 
-      const toAsk = unanswered.slice(0, 25);
-      if (toAsk.length) {
-        setStatus(`Answer ${toAsk.length} question(s) one by one. Last step saves to data/me.`);
-        try {
-          renderAskForm(toAsk, async (answers) => {
-            const entries = [];
-            let n = 0;
-            for (const ans of answers) {
-              const field = lastFieldMap.get(ans.id);
-              if (!field) continue;
-              let value = ans.value;
-              if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
-                value = pickOption(ans.value, field.options) || ans.value;
-              }
-              if (fillField(field, value, "memory")) n += 1;
-              entries.push({ question: field.label, answer: ans.value, fieldType: field.type, ats });
-            }
-            if (entries.length) {
-              await chrome.runtime.sendMessage({ type: "SAVE_MEMORY_BATCH", entries });
-              await chrome.runtime.sendMessage({ type: "SAVE_LEARNED_ANSWERS", entries });
-            }
-            clearAskForm();
-            setStatus(`Saved ${entries.length} answer(s) to answers.json, filled ${n} fields. Review then submit.`);
-          });
-        } catch (askErr) {
-          console.error(askErr);
-          setStatus(`Ask UI error: ${askErr.message || askErr}. ${toAsk.length} fields still empty.`);
-        }
+      if (unresolved.length) {
+        startTeaching(unresolved, ats, "");
       } else {
-        setStatus(`Done — scanned ${fields.length} fields, filled ${filled}. Nothing left to ask.`);
+        setStatus(`Done — filled ${filled}/${fields.length}. Use Teach unanswered if you want to review.`);
       }
     } catch (err) {
       console.error(err);
@@ -949,6 +997,15 @@
     }
   }
 
+  function runTeachOnly() {
+    showPanel();
+    const fields = scanFields();
+    lastFieldMap = new Map(fields.map((f) => [f.id, f]));
+    const unanswered = fields.filter((f) => f.type !== "file" && isEmpty(f));
+    const target = unanswered.length ? unanswered : fields.filter((f) => f.type !== "file");
+    startTeaching(target, detectAts(), "Teach mode");
+  }
+
   function bindPanel() {
     ensurePanel().addEventListener("click", (e) => {
       const btn = e.target.closest("[data-ats-action]");
@@ -956,6 +1013,7 @@
       const action = btn.getAttribute("data-ats-action");
       if (action === "close") document.getElementById("local-ats-panel")?.classList.remove("open");
       if (action === "fill") runFill();
+      if (action === "teach") runTeachOnly();
       if (action === "clear") {
         clearHighlights();
         clearAskForm();
@@ -966,13 +1024,22 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "PING") {
-      sendResponse({ ok: true, ats: detectAts(), href: location.href });
+      sendResponse({ ok: true, ats: detectAts(), href: location.href, build: BUILD });
       return true;
     }
     if (msg?.type === "RUN_FILL") {
       runFill()
         .then(() => sendResponse({ ok: true }))
         .catch((e) => sendResponse({ ok: false, error: String(e) }));
+      return true;
+    }
+    if (msg?.type === "RUN_TEACH") {
+      try {
+        runTeachOnly();
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
       return true;
     }
     if (msg?.type === "SHOW_PANEL") {
@@ -985,5 +1052,5 @@
 
   bindPanel();
   showPanel();
-  setStatus(`Detected: ${detectAts()}. Click Fill.`);
+  setStatus(`Detected: ${detectAts()} (build ${BUILD}). Click Fill — I will ask what I cannot answer.`);
 })();
