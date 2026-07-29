@@ -314,6 +314,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "SAVE_LEARNED_ANSWERS") {
       return saveLearnedAnswers(msg.entries || []);
     }
+    if (msg?.type === "FETCH_CHALLENGE_ANSWER") {
+      try {
+        const url = String(msg.url || "");
+        if (!/^https:\/\/docs\.google\.com\/document\//i.test(url)) {
+          return { ok: false, error: "unsupported challenge url" };
+        }
+        const id = url.match(/\/document\/d\/([^/]+)/)?.[1];
+        if (!id) return { ok: false, error: "missing doc id" };
+        const exportUrl = `https://docs.google.com/document/d/${id}/export?format=txt`;
+        const res = await fetch(exportUrl);
+        if (!res.ok) return { ok: false, error: `docs fetch ${res.status}` };
+        const text = await res.text();
+        const quoted =
+          text.match(/[“"]\s*([^”"\n]+?)\s*[”"]/) ||
+          text.match(/between the quotes:\s*[“"]?([A-Za-z0-9_-]+)[”"]?/i);
+        const answer = (quoted?.[1] || "").trim();
+        if (!answer) return { ok: false, error: "no quoted answer in doc", raw: text.slice(0, 300) };
+        return { ok: true, answer };
+      } catch (err) {
+        return { ok: false, error: err.message || String(err) };
+      }
+    }
     if (msg?.type === "LLM_FILL") {
       try {
         const result = await llmFill(msg.payload || {});

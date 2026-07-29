@@ -1,6 +1,6 @@
 /* Classic content script — no import/export. Works with scripting.executeScript. */
 (function () {
-  const BUILD = "0.2.3";
+  const BUILD = "0.2.4";
   if (window.__localAtsBuild === BUILD && window.__localAtsContentReady) return;
   window.__localAtsBuild = BUILD;
   window.__localAtsContentReady = true;
@@ -19,8 +19,9 @@
     { keys: ["state", "province", "region"], fact: "state", conf: 0.85 },
     { keys: ["country"], fact: "country", conf: 0.9 },
     { keys: ["location", "current location", "where are you based", "reside"], fact: "location", conf: 0.85 },
+    { keys: ["company name", "most recent company", "current company", "current/most recent company", "employer name"], fact: "current_company", conf: 0.9 },
     { keys: ["years of experience", "years experience", "how many years", "total experience"], fact: "years_experience", conf: 0.9 },
-    { keys: ["current title", "job title", "most recent title", "headline"], fact: "current_title", conf: 0.85 },
+    { keys: ["current title", "job title", "most recent title", "most recent job title", "headline"], fact: "current_title", conf: 0.85 },
     { keys: ["authorized to work", "legally authorized", "work authorization", "eligible to work"], fact: "authorized_to_work_us", conf: 0.92 },
     { keys: ["require sponsorship", "need sponsorship", "visa sponsorship", "immigration sponsorship", "will you now or in the future"], fact: "needs_sponsorship", conf: 0.92 },
     { keys: ["relocat"], fact: "willing_to_relocate", conf: 0.85 },
@@ -319,18 +320,79 @@
     const special = applySpecialAnswers(label, options);
     if (special) return special;
 
+    // Ashby often uses a single "Name" field (not first/last).
+    if (/^(name|full name|legal name)$/i.test(text.trim()) && facts.full_name) {
+      return { value: String(facts.full_name), confidence: 0.95, source: "rule" };
+    }
+
+    // Work Authorization radios with long sentence options (not Yes/No).
+    if (/work authorization/i.test(text) && options?.length >= 2) {
+      if (facts.needs_sponsorship === "Yes") {
+        const opt = options.find((o) => /sponsorship|will require|h-?1b|\btn\b/i.test(o));
+        if (opt) return { value: opt, confidence: 0.96, source: "rule" };
+      }
+      if (facts.authorized_to_work_us === "Yes") {
+        const opt = options.find(
+          (o) =>
+            /legally authorized|authorized to work for any employer/i.test(o) &&
+            !/sponsorship|will require|require,/i.test(o)
+        );
+        if (opt) return { value: opt, confidence: 0.96, source: "rule" };
+      }
+    }
+
+    // "near our offices / willing to relocate or commute"
+    if (/located near our offices|relocate or commute/i.test(text) && options?.length) {
+      const city = String(facts.city || "").toLowerCase();
+      const page = (document.body?.innerText || "").toLowerCase();
+      if (city && page.includes(city)) {
+        const yes = pickOption("Yes", options) || "Yes";
+        return { value: yes, confidence: 0.9, source: "rule" };
+      }
+      const fallback = pickOption(facts.willing_to_relocate || "No", options);
+      if (fallback) return { value: fallback, confidence: 0.82, source: "rule" };
+    }
+
     for (const rule of RULES) {
       if (!rule.keys.some((k) => text.includes(k))) continue;
       const value = facts[rule.fact];
       if (value === undefined || value === null || value === "") continue;
       if (options?.length) {
         const picked = pickOption(String(value), options);
-        if (!picked) return null;
+        if (!picked) continue;
         return { value: picked, confidence: rule.conf, source: "rule" };
       }
       return { value: String(value), confidence: rule.conf, source: "rule" };
     }
     return null;
+  }
+
+  function extractBase64Token(text) {
+    const m = String(text || "").match(/[A-Za-z0-9+/]{40,}={0,2}/);
+    return m ? m[0] : null;
+  }
+
+  async function resolveDecodeChallenge(label) {
+    if (!/decode the following|decode .*text|base\s*64/i.test(label || "") && !/aHR0c/i.test(label || "")) {
+      return null;
+    }
+    const token = extractBase64Token(label);
+    if (!token) return null;
+    let decoded = "";
+    try {
+      decoded = atob(token);
+    } catch (_) {
+      return null;
+    }
+    if (!decoded) return null;
+    if (/^https?:\/\//i.test(decoded)) {
+      try {
+        const res = await chrome.runtime.sendMessage({ type: "FETCH_CHALLENGE_ANSWER", url: decoded });
+        if (res?.ok && res.answer) return String(res.answer).trim();
+      } catch (_) {}
+      return decoded;
+    }
+    return decoded.trim();
   }
 
   function profileFacts(profile) {
@@ -358,6 +420,7 @@
       portfolio: personal.portfolioUrl || personal.website || "",
       website: personal.website || personal.portfolioUrl || "",
       current_title: work.currentTitle || exp0.title || "",
+      current_company: work.currentCompany || exp0.company || "",
       years_experience: work.yearsExperience || "",
       summary: work.summary || "",
       skills: Array.isArray(work.skills) ? work.skills.join(", ") : "",
@@ -615,6 +678,40 @@
     return true;
   }
 
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  function isCombobox(el) {
+    if (!el) return false;
+    return (
+      el.getAttribute?.("role") === "combobox" ||
+      el.getAttribute?.("aria-autocomplete") === "list" ||
+      el.getAttribute?.("aria-haspopup") === "listbox"
+    );
+  }
+
+  async function fillCombobox(el, value) {
+    if (!fillText(el, value)) return false;
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    await sleep(350);
+    const want = String(value).toLowerCase();
+    const city = want.split(",")[0].trim();
+    const options = [...document.querySelectorAll('[role="option"]')];
+    let target =
+      options.find((o) => cleanText(o.textContent).toLowerCase().includes(city)) ||
+      options.find((o) => cleanText(o.textContent).toLowerCase().includes(want.slice(0, 12))) ||
+      options[0];
+    if (target) {
+      target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      target.click();
+      await sleep(100);
+      return true;
+    }
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    return !!String(el.value || "").trim();
+  }
+
   function splitMultiValue(desired) {
     return String(desired || "")
       .split(/\s*\|\|\|\s*/)
@@ -770,12 +867,13 @@
     return !isEmpty({ ...field, type: "yesno" }) || isYesNoActive(target);
   }
 
-  function fillField(field, value, level) {
+  async function fillField(field, value, level) {
     let ok = false;
     if (field.type === "file") return false;
     if (field.type === "yesno") ok = fillYesNo(field, value);
     else if (field.type === "select" || field.type === "multiselect") ok = fillSelect(field.el, value);
     else if (field.type === "radio" || field.type === "checkbox") ok = fillRadioOrCheckbox(field.elements, value, field.type);
+    else if (isCombobox(field.el)) ok = await fillCombobox(field.el, value);
     else ok = fillText(field.el, value);
     if (ok) highlight(field.elements || field.el, level || "high");
     else if (field.required) highlight(field.elements || field.el, "low");
@@ -994,7 +1092,7 @@
         if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
           value = pickOption(ans.value, field.options) || ans.value;
         }
-        if (fillField(field, value, "memory")) n += 1;
+        if (await fillField(field, value, "memory")) n += 1;
         entries.push({ question: field.label, answer: ans.value, fieldType: field.type, ats });
       }
       if (entries.length) {
@@ -1091,13 +1189,29 @@
         if (field.type === "file") continue;
 
         let handled = false;
+
+        const challenge = await resolveDecodeChallenge(field.label);
+        if (challenge) {
+          if ((await fillField(field, challenge, "high")) && !isEmpty(field)) {
+            filled += 1;
+            resolvedIds.add(field.id);
+            handled = true;
+            learned.push({
+              question: field.label.slice(0, 120),
+              answer: challenge,
+              fieldType: field.type,
+              ats
+            });
+          }
+        }
+
         const mem = findMemoryAnswer(memory, field.label);
-        if (mem?.answer) {
+        if (!handled && mem?.answer) {
           let value = mem.answer;
           if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
             value = pickOption(mem.answer, field.options) || mem.answer;
           }
-          if (fillField(field, value, "memory") && !isEmpty(field)) {
+          if ((await fillField(field, value, "memory")) && !isEmpty(field)) {
             filled += 1;
             memoryHits += 1;
             resolvedIds.add(field.id);
@@ -1108,7 +1222,10 @@
         if (!handled) {
           const mapped = mapFieldLocally(field.label, facts, field.options);
           if (mapped?.value && (mapped.confidence || 0) >= 0.8) {
-            if (fillField(field, mapped.value, levelFromConfidence(mapped.confidence, "rule")) && !isEmpty(field)) {
+            if (
+              (await fillField(field, mapped.value, levelFromConfidence(mapped.confidence, "rule"))) &&
+              !isEmpty(field)
+            ) {
               filled += 1;
               resolvedIds.add(field.id);
               handled = true;
@@ -1148,7 +1265,10 @@
               if (field.options?.length && field.type !== "checkbox" && field.type !== "multiselect") {
                 value = pickOption(ans.value, field.options) || ans.value;
               }
-              if (fillField(field, value, levelFromConfidence(ans.confidence ?? 0.7, "llm")) && !isEmpty(field)) {
+              if (
+                (await fillField(field, value, levelFromConfidence(ans.confidence ?? 0.7, "llm"))) &&
+                !isEmpty(field)
+              ) {
                 filled += 1;
                 llmHits += 1;
                 resolvedIds.add(field.id);

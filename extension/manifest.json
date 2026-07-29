@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local ATS Autofill",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Local-first ATS autofill (Greenhouse, Lever, Ashby). Script entry: page/autofill.js.",
   "icons": {
     "16": "icons/icon16.png",
@@ -30,6 +30,7 @@
     "https://*.lever.co/*",
     "https://jobs.ashbyhq.com/*",
     "https://*.ashbyhq.com/*",
+    "https://docs.google.com/*",
     "http://127.0.0.1:11434/*",
     "http://localhost:11434/*",
     "http://127.0.0.1:3847/*",
