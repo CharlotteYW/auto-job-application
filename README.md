@@ -122,17 +122,18 @@ docs/                # beginner Chrome extension guide
 
 ### `content/content.js` import / stack trace errors
 
-That file is no longer the real content script (we use `content/main-classic.js`).
-If Chrome still shows an error about `content/content.js` imports:
+Old builds used `content/content.js`. Current entry is **`page/autofill.js`** (v0.2.0+).
 
-1. Open `chrome://extensions`
-2. **Remove** Local ATS Autofill (do not only click Reload)
-3. **Load unpacked** again and select the `extension/` folder
-4. Hard-refresh the job application tab (`Cmd+R`)
+If Chrome still shows `content/content.js` import errors:
 
-Confirm the extension version is **0.1.8** or newer on the extensions page.
-There must be **no** `content/content.js` file — only `content/main-classic.js`.
-If Errors still mention `content.js`, you are running a stale install: Remove, then Load unpacked again.
+1. Quit Chrome completely (`Cmd+Q`) — not just close the window
+2. Open Chrome again → `chrome://extensions`
+3. **Remove** Local ATS Autofill
+4. **Load unpacked** → select the `extension/` folder
+5. Confirm version is **0.2.0** or newer
+6. Hard-refresh the job tab (`Cmd+R`)
+
+There is no `content/` folder anymore. If Errors still mention `content.js`, Chrome is not loading this folder.
 
 ---
 

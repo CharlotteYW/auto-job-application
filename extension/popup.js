@@ -26,14 +26,14 @@ async function ensureContentScript(tabId) {
   try {
     await chrome.scripting.insertCSS({
       target: { tabId, allFrames: true },
-      files: ["content/content.css"]
+      files: ["page/autofill.css"]
     });
   } catch (_) {}
 
   try {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: ["content/main-classic.js"]
+      files: ["page/autofill.js"]
     });
   } catch (err) {
     console.error("executeScript failed", err);

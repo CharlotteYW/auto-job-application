@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Local ATS Autofill",
-  "version": "0.1.8",
-  "description": "Local-first ATS autofill (Greenhouse, Lever, Ashby). Entry: content/main-classic.js. No cloud account required.",
+  "version": "0.2.0",
+  "description": "Local-first ATS autofill (Greenhouse, Lever, Ashby). Script entry: page/autofill.js.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -50,8 +50,8 @@
         "https://jobs.ashbyhq.com/*",
         "https://*.ashbyhq.com/*"
       ],
-      "js": ["content/main-classic.js"],
-      "css": ["content/content.css"],
+      "js": ["page/autofill.js"],
+      "css": ["page/autofill.css"],
       "run_at": "document_idle",
       "all_frames": true
     }
