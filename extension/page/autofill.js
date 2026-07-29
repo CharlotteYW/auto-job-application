@@ -1,7 +1,7 @@
 /* Classic content script — no import/export. Works with scripting.executeScript. */
 (function () {
-  const BUILD = "0.2.2";
-  if (window.__localAtsBuild === BUILD) return;
+  const BUILD = "0.2.3";
+  if (window.__localAtsBuild === BUILD && window.__localAtsContentReady) return;
   window.__localAtsBuild = BUILD;
   window.__localAtsContentReady = true;
   window.__localAtsLoaded = true;
@@ -119,9 +119,10 @@
   }
 
   function questionContainer(el) {
+    // Prefer the tightest Ashby/Greenhouse field wrapper — never climb to a whole section/form.
     return (
       el.closest(
-        "fieldset, [role='group'], .field, .application-question, .question, [class*='question'], [class*='Question'], [data-testid*='question'], [class*='FormField'], .ashby-application-form-field-entry, [class*='fieldEntry']"
+        ".ashby-application-form-field-entry, [class*='fieldEntry'], fieldset, [role='group'], .field, .application-question, .question, [data-testid*='question'], [class*='FormField']"
       ) || el.parentElement
     );
   }
@@ -132,17 +133,20 @@
 
   function yesNoButtons(wrap) {
     if (!wrap) return [];
-    return [...wrap.querySelectorAll("button")].filter((b) => /^(yes|no)$/i.test(cleanText(b.textContent)));
+    return [...wrap.querySelectorAll(":scope > button, button")].filter((b) =>
+      /^(yes|no)$/i.test(cleanText(b.textContent))
+    );
   }
 
   function isYesNoControl(el) {
-    const wrap = yesNoWrap(el) || el?.parentElement;
+    if (!el) return false;
+    const wrap = yesNoWrap(el) || el.parentElement;
     return yesNoButtons(wrap).length >= 2;
   }
 
   function yesNoLabel(el, wrap) {
     const entry =
-      el.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']") ||
+      el?.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']") ||
       wrap?.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']") ||
       questionContainer(el);
     const title = entry?.querySelector?.(
@@ -162,7 +166,9 @@
 
   function isYesNoActive(btn) {
     if (!btn) return false;
-    if (/_active_|\bactive\b|selected|is-selected/i.test(btn.className || "")) return true;
+    if (/_active_/.test(btn.className || "")) return true;
+    if (/(^|\s)active(\s|$)/i.test(btn.className || "")) return true;
+    if (/(^|\s)(is-)?selected(\s|$)/i.test(btn.className || "")) return true;
     return (
       btn.getAttribute("aria-pressed") === "true" ||
       btn.getAttribute("aria-checked") === "true" ||
@@ -186,6 +192,63 @@
     try {
       btn.click();
     } catch (_) {}
+  }
+
+  function makeYesNoField(checkbox, wrap, buttons) {
+    const id = `ats-field-${++fieldSeq}`;
+    if (checkbox) checkbox.dataset.atsFieldId = id;
+    const entry = (checkbox || wrap)?.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']");
+    const required =
+      !!checkbox?.required ||
+      checkbox?.getAttribute?.("aria-required") === "true" ||
+      !!entry?.querySelector("label[class*='required'], .ashby-application-form-question-title[class*='required']");
+    return {
+      id,
+      el: checkbox || buttons[0],
+      elements: buttons,
+      label: yesNoLabel(checkbox || buttons[0], wrap),
+      type: "yesno",
+      required,
+      options: buttons.map((b) => cleanText(b.textContent)).filter(Boolean),
+      name: checkbox?.name || "",
+      multi: false
+    };
+  }
+
+  function scanYesNoFields(root, seen) {
+    const fields = [];
+    const usedWraps = new WeakSet();
+
+    // Pass A: hidden Ashby checkboxes inside yes/no widgets
+    for (const el of root.querySelectorAll("input[type='checkbox']")) {
+      if (seen.has(el) || !isYesNoControl(el)) continue;
+      const wrap = yesNoWrap(el) || el.parentElement;
+      if (!wrap || usedWraps.has(wrap)) continue;
+      const buttons = yesNoButtons(wrap);
+      if (buttons.length < 2) continue;
+      usedWraps.add(wrap);
+      seen.add(el);
+      buttons.forEach((b) => seen.add(b));
+      fields.push(makeYesNoField(el, wrap, buttons));
+    }
+
+    // Pass B: field entries that only expose Yes/No buttons
+    for (const entry of root.querySelectorAll(
+      ".ashby-application-form-field-entry, [class*='fieldEntry'], [class*='yesno'], [class*='YesNo']"
+    )) {
+      const wrap = yesNoWrap(entry) || entry;
+      if (usedWraps.has(wrap)) continue;
+      const buttons = yesNoButtons(wrap);
+      if (buttons.length < 2) continue;
+      const checkbox = wrap.querySelector("input[type='checkbox']");
+      if (checkbox && seen.has(checkbox)) continue;
+      usedWraps.add(wrap);
+      if (checkbox) seen.add(checkbox);
+      buttons.forEach((b) => seen.add(b));
+      fields.push(makeYesNoField(checkbox, wrap, buttons));
+    }
+
+    return fields;
   }
 
   function normalizeQuestion(text) {
@@ -369,6 +432,11 @@
     fieldSeq = 0;
     const fields = [];
     const seen = new WeakSet();
+
+    // Ashby Yes/No must be collected BEFORE checkbox multi-select grouping,
+    // otherwise hidden visa checkboxes get swallowed into "how did you hear".
+    for (const f of scanYesNoFields(root, seen)) fields.push(f);
+
     const inputs = root.querySelectorAll("input, textarea, select");
     for (const el of inputs) {
       if (seen.has(el)) continue;
@@ -400,37 +468,10 @@
         continue;
       }
 
-      // Ashby Yes/No: hidden checkbox + visible Yes/No buttons
-      if (type === "checkbox" && isYesNoControl(el)) {
-        const wrap = yesNoWrap(el) || el.parentElement;
-        const buttons = yesNoButtons(wrap);
-        if (seen.has(el)) continue;
-        seen.add(el);
-        buttons.forEach((b) => seen.add(b));
-        const id = `ats-field-${++fieldSeq}`;
-        el.dataset.atsFieldId = id;
-        const entry = el.closest(".ashby-application-form-field-entry, [class*='fieldEntry']");
-        const required =
-          !!el.required ||
-          el.getAttribute("aria-required") === "true" ||
-          !!entry?.querySelector("label[class*='required'], .ashby-application-form-question-title[class*='required']");
-        fields.push({
-          id,
-          el,
-          elements: buttons,
-          label: yesNoLabel(el, wrap),
-          type: "yesno",
-          required,
-          options: buttons.map((b) => cleanText(b.textContent)).filter(Boolean),
-          name: el.name || "",
-          multi: false
-        });
-        continue;
-      }
-
       if (!visible(el)) continue;
 
       if (type === "radio" || type === "checkbox") {
+        if (isYesNoControl(el)) continue;
         const container = questionContainer(el);
         let group = [];
 
@@ -445,12 +486,13 @@
 
         // 2) For checkboxes with unique names (Ashby), take siblings in the SAME question container only
         if (type === "checkbox" && container && group.length <= 1) {
-          const inContainer = [...container.querySelectorAll(`input[type="checkbox"], [role="checkbox"]`)];
+          const inContainer = [...container.querySelectorAll(`input[type="checkbox"], [role="checkbox"]`)].filter(
+            (c) => !isYesNoControl(c) && !seen.has(c)
+          );
           // Keep groups small — avoid swallowing the whole form
           if (inContainer.length >= 2 && inContainer.length <= 20) {
             group = inContainer;
           } else if (inContainer.length > 20) {
-            // Too many — fall back to same-name or single control
             group = group.length ? group : [el];
           } else {
             group = inContainer.length ? inContainer : [el];
@@ -458,16 +500,17 @@
         }
 
         if (!group.length) group = [el];
+        group = group.filter((g) => !seen.has(g) && !isYesNoControl(g));
+        if (!group.length) continue;
         group.forEach((g) => seen.add(g));
 
         let groupLabel = "";
         if (container) {
           const headingEl = container.querySelector(
-            "legend, h3, h4, [class*='heading'], [class*='Heading'], [class*='title'], [class*='Title']"
+            "legend, h3, h4, label.ashby-application-form-question-title, [class*='heading'], [class*='Heading'], [class*='title'], [class*='Title']"
           );
           groupLabel = cleanText(headingEl?.textContent || "");
           if (!groupLabel || groupLabel.length < 8) {
-            // first label-like node that mentions select-all / question punctuation
             const labels = [...container.querySelectorAll("label, p, span, div")].slice(0, 12);
             for (const node of labels) {
               const t = cleanText(node.textContent);
@@ -484,7 +527,6 @@
         const uniq = [];
         const seenOpt = new Set();
         for (const o of options) {
-          // Drop labels that are basically the whole question text
           if (groupLabel && o.length > 50 && similarity(o, groupLabel) > 0.8) continue;
           const k = o.toLowerCase();
           if (seenOpt.has(k)) continue;
@@ -936,7 +978,11 @@
     for (const field of fields) {
       if (field.type !== "file") highlight(field.elements || field.el, "low");
     }
-    setStatus(`Teach mode: ${toAsk.length} question(s). Answer one by one, then Save.`);
+    const preview = toAsk
+      .slice(0, 3)
+      .map((q) => q.label)
+      .join(" · ");
+    setStatus(`Teach mode: ${toAsk.length} question(s). First: ${preview}`);
     showPanel();
     renderAskForm(toAsk, async (answers) => {
       const entries = [];
@@ -957,6 +1003,13 @@
       }
       clearAskForm();
       setStatus(`Saved ${entries.length} answer(s) to answers.json, filled ${n} fields.`);
+    });
+    // Make sure the question UI is visible inside the floating panel
+    requestAnimationFrame(() => {
+      const panel = document.getElementById("local-ats-panel");
+      const ask = document.querySelector("#ats-ask");
+      if (panel) panel.scrollTop = Math.max(0, (ask?.offsetTop || 0) - 8);
+      ask?.scrollIntoView?.({ block: "nearest" });
     });
   }
 
@@ -1076,12 +1129,15 @@
       }
 
       if (pending.length && settings.llmProvider !== "off") {
-        setStatus(`Pass 2: LLM for ${pending.length} fields…`);
+        setStatus(`Pass 2: LLM for ${pending.length} fields (max 15s)…`);
         try {
-          const llmRes = await chrome.runtime.sendMessage({
-            type: "LLM_FILL",
-            payload: { fields: pending, facts, job, ats, settings }
-          });
+          const llmRes = await Promise.race([
+            chrome.runtime.sendMessage({
+              type: "LLM_FILL",
+              payload: { fields: pending, facts, job, ats, settings }
+            }),
+            new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: "LLM timeout" }), 15000))
+          ]);
           if (llmRes?.ok) {
             const byId = Object.fromEntries((llmRes.answers || []).map((a) => [a.id, a]));
             for (const field of fields) {
@@ -1100,10 +1156,10 @@
               }
             }
           } else {
-            setStatus(`LLM failed: ${llmRes?.error || "unknown"}. Asking you the rest.`);
+            setStatus(`LLM skipped: ${llmRes?.error || "unknown"}. Asking you the rest…`);
           }
         } catch (llmErr) {
-          setStatus(`LLM error: ${llmErr.message || llmErr}. Asking you the rest.`);
+          setStatus(`LLM error: ${llmErr.message || llmErr}. Asking you the rest…`);
         }
       }
 
@@ -1115,6 +1171,7 @@
       const unresolved = fields.filter((f) => f.type !== "file" && !resolvedIds.has(f.id));
       for (const field of unresolved) highlight(field.elements || field.el, "low");
 
+      const yesNoCount = fields.filter((f) => f.type === "yesno").length;
       setStats({
         filled,
         memory: memoryHits,
@@ -1124,10 +1181,14 @@
         resume: resumeLabel
       });
 
+      // Always open teach UI for anything still blank — do not wait for another click.
       if (unresolved.length) {
+        setStatus(
+          `Filled ${filled}/${fields.length} (yes/no detected: ${yesNoCount}). Asking ${unresolved.length} unanswered…`
+        );
         startTeaching(unresolved, ats, "");
       } else {
-        setStatus(`Done — filled ${filled}/${fields.length}. Use Teach unanswered if you want to review.`);
+        setStatus(`Done — filled ${filled}/${fields.length} (yes/no: ${yesNoCount}).`);
       }
     } catch (err) {
       console.error(err);
@@ -1142,7 +1203,18 @@
     const fields = scanFields();
     lastFieldMap = new Map(fields.map((f) => [f.id, f]));
     const unanswered = fields.filter((f) => f.type !== "file" && isEmpty(f));
-    const target = unanswered.length ? unanswered : fields.filter((f) => f.type !== "file");
+    // Prefer blank fields; if none blank, still offer required / yesno / everything
+    let target = unanswered;
+    if (!target.length) {
+      target = fields.filter((f) => f.type === "yesno" || f.required);
+    }
+    if (!target.length) {
+      target = fields.filter((f) => f.type !== "file");
+    }
+    const yesNo = fields.filter((f) => f.type === "yesno");
+    setStatus(
+      `Scan: ${fields.length} fields, ${yesNo.length} yes/no, ${unanswered.length} blank. Opening teach…`
+    );
     startTeaching(target, detectAts(), "Teach mode");
   }
 
@@ -1162,7 +1234,12 @@
     });
   }
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (window.__localAtsMessageHandler) {
+    try {
+      chrome.runtime.onMessage.removeListener(window.__localAtsMessageHandler);
+    } catch (_) {}
+  }
+  window.__localAtsMessageHandler = (msg, _sender, sendResponse) => {
     if (msg?.type === "PING") {
       sendResponse({ ok: true, ats: detectAts(), href: location.href, build: BUILD });
       return true;
@@ -1188,7 +1265,8 @@
       return true;
     }
     return false;
-  });
+  };
+  chrome.runtime.onMessage.addListener(window.__localAtsMessageHandler);
 
   bindPanel();
   showPanel();
