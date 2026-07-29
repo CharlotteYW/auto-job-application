@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Local ATS Autofill",
-  "version": "0.1.7",
-  "description": "Local-first job application autofill for Greenhouse, Lever, and Ashby. Uses your profile, answer memory, and local Ollama — no cloud account required.",
+  "version": "0.1.8",
+  "description": "Local-first ATS autofill (Greenhouse, Lever, Ashby). Entry: content/main-classic.js. No cloud account required.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

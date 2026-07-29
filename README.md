@@ -130,7 +130,9 @@ If Chrome still shows an error about `content/content.js` imports:
 3. **Load unpacked** again and select the `extension/` folder
 4. Hard-refresh the job application tab (`Cmd+R`)
 
-Confirm the extension version is **0.1.7** or newer on the extensions page.
+Confirm the extension version is **0.1.8** or newer on the extensions page.
+There must be **no** `content/content.js` file — only `content/main-classic.js`.
+If Errors still mention `content.js`, you are running a stale install: Remove, then Load unpacked again.
 
 ---
 
