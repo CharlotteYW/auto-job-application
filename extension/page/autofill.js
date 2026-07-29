@@ -1,6 +1,6 @@
 /* Classic content script — no import/export. Works with scripting.executeScript. */
 (function () {
-  const BUILD = "0.2.1";
+  const BUILD = "0.2.2";
   if (window.__localAtsBuild === BUILD) return;
   window.__localAtsBuild = BUILD;
   window.__localAtsContentReady = true;
@@ -121,9 +121,71 @@
   function questionContainer(el) {
     return (
       el.closest(
-        "fieldset, [role='group'], .field, .application-question, .question, [class*='question'], [class*='Question'], [data-testid*='question'], [class*='FormField']"
+        "fieldset, [role='group'], .field, .application-question, .question, [class*='question'], [class*='Question'], [data-testid*='question'], [class*='FormField'], .ashby-application-form-field-entry, [class*='fieldEntry']"
       ) || el.parentElement
     );
+  }
+
+  function yesNoWrap(el) {
+    return el?.closest?.("[class*='yesno'], [class*='YesNo']") || null;
+  }
+
+  function yesNoButtons(wrap) {
+    if (!wrap) return [];
+    return [...wrap.querySelectorAll("button")].filter((b) => /^(yes|no)$/i.test(cleanText(b.textContent)));
+  }
+
+  function isYesNoControl(el) {
+    const wrap = yesNoWrap(el) || el?.parentElement;
+    return yesNoButtons(wrap).length >= 2;
+  }
+
+  function yesNoLabel(el, wrap) {
+    const entry =
+      el.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']") ||
+      wrap?.closest?.(".ashby-application-form-field-entry, [class*='fieldEntry']") ||
+      questionContainer(el);
+    const title = entry?.querySelector?.(
+      "label.ashby-application-form-question-title, label[class*='label'], legend, h3, h4"
+    );
+    const t = cleanText(title?.textContent);
+    if (t && t.length >= 8 && t.length < 240) return t;
+    if (el?.name) {
+      try {
+        const byFor = document.querySelector(`label[for="${CSS.escape(el.name)}"]`);
+        const lt = cleanText(byFor?.textContent);
+        if (lt) return lt;
+      } catch (_) {}
+    }
+    return labelFor(el);
+  }
+
+  function isYesNoActive(btn) {
+    if (!btn) return false;
+    if (/_active_|\bactive\b|selected|is-selected/i.test(btn.className || "")) return true;
+    return (
+      btn.getAttribute("aria-pressed") === "true" ||
+      btn.getAttribute("aria-checked") === "true" ||
+      btn.getAttribute("aria-selected") === "true" ||
+      btn.dataset.selected === "true"
+    );
+  }
+
+  function pressButton(btn) {
+    if (!btn) return;
+    const opts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+    try {
+      btn.dispatchEvent(new PointerEvent("pointerdown", opts));
+    } catch (_) {}
+    btn.dispatchEvent(new MouseEvent("mousedown", opts));
+    try {
+      btn.dispatchEvent(new PointerEvent("pointerup", opts));
+    } catch (_) {}
+    btn.dispatchEvent(new MouseEvent("mouseup", opts));
+    btn.dispatchEvent(new MouseEvent("click", opts));
+    try {
+      btn.click();
+    } catch (_) {}
   }
 
   function normalizeQuestion(text) {
@@ -334,6 +396,34 @@
           required: !!el.required,
           options: [],
           name: el.name || ""
+        });
+        continue;
+      }
+
+      // Ashby Yes/No: hidden checkbox + visible Yes/No buttons
+      if (type === "checkbox" && isYesNoControl(el)) {
+        const wrap = yesNoWrap(el) || el.parentElement;
+        const buttons = yesNoButtons(wrap);
+        if (seen.has(el)) continue;
+        seen.add(el);
+        buttons.forEach((b) => seen.add(b));
+        const id = `ats-field-${++fieldSeq}`;
+        el.dataset.atsFieldId = id;
+        const entry = el.closest(".ashby-application-form-field-entry, [class*='fieldEntry']");
+        const required =
+          !!el.required ||
+          el.getAttribute("aria-required") === "true" ||
+          !!entry?.querySelector("label[class*='required'], .ashby-application-form-question-title[class*='required']");
+        fields.push({
+          id,
+          el,
+          elements: buttons,
+          label: yesNoLabel(el, wrap),
+          type: "yesno",
+          required,
+          options: buttons.map((b) => cleanText(b.textContent)).filter(Boolean),
+          name: el.name || "",
+          multi: false
         });
         continue;
       }
@@ -594,10 +684,55 @@
     }
   }
 
+  function fillYesNo(field, desired) {
+    if (desired == null || desired === "") return false;
+    const wantRaw = String(desired).trim();
+    const want = wantRaw.toLowerCase();
+    const isYes = /^(yes|y|true|1)$/i.test(wantRaw);
+    const isNo = /^(no|n|false|0)$/i.test(wantRaw);
+    const buttons = field.elements || [];
+    let target = null;
+    for (const btn of buttons) {
+      const t = cleanText(btn.textContent).toLowerCase();
+      if (isYes && t === "yes") {
+        target = btn;
+        break;
+      }
+      if (isNo && t === "no") {
+        target = btn;
+        break;
+      }
+      if (t === want || optionMatches(wantRaw, t, t)) {
+        target = btn;
+        break;
+      }
+    }
+    if (!target) return false;
+    pressButton(target);
+    // Fallback: sync hidden checkbox (Ashby: Yes=checked, No=unchecked)
+    const cb = field.el;
+    if (cb && (cb.type || "").toLowerCase() === "checkbox") {
+      const shouldCheck = isYes || (!isNo && /yes/i.test(wantRaw));
+      if (cb.checked !== shouldCheck) {
+        try {
+          const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked");
+          desc?.set?.call(cb, shouldCheck);
+          cb.dispatchEvent(new Event("click", { bubbles: true }));
+          cb.dispatchEvent(new Event("input", { bubbles: true }));
+          cb.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (_) {
+          if (cb.checked !== shouldCheck) cb.click();
+        }
+      }
+    }
+    return !isEmpty({ ...field, type: "yesno" }) || isYesNoActive(target);
+  }
+
   function fillField(field, value, level) {
     let ok = false;
     if (field.type === "file") return false;
-    if (field.type === "select" || field.type === "multiselect") ok = fillSelect(field.el, value);
+    if (field.type === "yesno") ok = fillYesNo(field, value);
+    else if (field.type === "select" || field.type === "multiselect") ok = fillSelect(field.el, value);
     else if (field.type === "radio" || field.type === "checkbox") ok = fillRadioOrCheckbox(field.elements, value, field.type);
     else ok = fillText(field.el, value);
     if (ok) highlight(field.elements || field.el, level || "high");
@@ -753,9 +888,14 @@
       if (field.el.multiple) return ![...field.el.options].some((o) => o.selected && o.value);
       return !field.el.value;
     }
+    if (field.type === "yesno") {
+      // Ashby marks the chosen Yes/No button with an _active_ class.
+      // Do NOT use checkbox.checked alone — "No" leaves it unchecked.
+      return !(field.elements || []).some(isYesNoActive);
+    }
     if (field.type === "radio" || field.type === "checkbox") {
       return ![...(field.elements || [])].some(
-        (e) => e.checked || e.getAttribute?.("aria-checked") === "true"
+        (e) => e.checked || e.getAttribute?.("aria-checked") === "true" || isYesNoActive(e)
       );
     }
     return !String(field.el.value || "").trim();
