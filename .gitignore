@@ -1,0 +1,17 @@
+# Personal user data — never commit real profiles/resumes
+data/*/profile.json
+data/*/answers.json
+data/**/*.pdf
+data/**/*.docx
+data/**/*.doc
+!data/**/PUT_RESUME_HERE.txt
+!data/**/README.md
+
+node_modules/
+.DS_Store
+.env
+local-bridge/.env
+*.log
+.chrome-profile/
+dist/
+.tmp/

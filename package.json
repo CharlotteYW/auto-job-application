@@ -1,0 +1,10 @@
+{
+  "name": "auto-job-application",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first ATS autofill Chrome extension + data folder server",
+  "scripts": {
+    "data-server": "node data-server/src/server.js",
+    "cursor-bridge": "npm --prefix local-bridge start"
+  }
+}

@@ -1,0 +1,189 @@
+#local-ats-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2147483646;
+  width: 340px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  font: 13px/1.4 "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #102a33;
+  background: #f4f8f9;
+  border: 1px solid #c5d5db;
+  box-shadow: 0 10px 30px rgba(16, 42, 51, 0.18);
+  border-radius: 10px;
+  display: none;
+}
+
+#local-ats-panel.open {
+  display: block;
+}
+
+#local-ats-panel .ats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #0f4c5c;
+  color: #eef6f8;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#local-ats-panel .ats-head button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#local-ats-panel .ats-body {
+  padding: 12px;
+}
+
+#local-ats-panel .ats-status {
+  margin-bottom: 8px;
+  color: #355560;
+}
+
+#local-ats-panel .ats-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+#local-ats-panel .ats-stats .ats-wide {
+  grid-column: 1 / -1;
+}
+
+#local-ats-panel .ats-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#local-ats-panel button[data-ats-action="fill"],
+#local-ats-panel button[data-ats-action="clear"],
+#local-ats-panel .ats-ask-next,
+#local-ats-panel .ats-ask-save {
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: #0f4c5c;
+  color: #fff;
+  font-weight: 600;
+}
+
+#local-ats-panel button.secondary,
+#local-ats-panel .ats-ask-skip {
+  background: #d7e4e8;
+  color: #102a33;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#local-ats-panel .ats-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #5a737c;
+}
+
+#local-ats-panel .ats-ask {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #c5d5db;
+}
+
+#local-ats-panel .ats-ask-title {
+  font-weight: 650;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+#local-ats-panel .ats-ask-progress {
+  height: 4px;
+  background: #d7e4e8;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+#local-ats-panel .ats-ask-progress > div {
+  height: 100%;
+  background: #0f4c5c;
+  width: 0;
+}
+
+#local-ats-panel .ats-ask-row {
+  margin-bottom: 10px;
+}
+
+#local-ats-panel .ats-ask-row label {
+  display: block;
+  font-size: 12px;
+  color: #102a33;
+  margin-bottom: 6px;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+#local-ats-panel .ats-ask-row input,
+#local-ats-panel .ats-ask-row textarea,
+#local-ats-panel .ats-ask-row select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c5d5db;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+
+#local-ats-panel .ats-ask-nav {
+  display: flex;
+  gap: 8px;
+}
+
+#local-ats-panel .ats-ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+#local-ats-panel .ats-ask-check {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px !important;
+  color: #102a33 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  cursor: pointer;
+}
+
+#local-ats-panel .ats-ask-check input {
+  width: auto !important;
+  margin-top: 2px;
+}
+
+#local-ats-panel .ats-ask-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #5a737c;
+}

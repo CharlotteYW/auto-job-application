@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Local ATS Autofill</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Local ATS</h1>
+      <p id="pageInfo">Checking page…</p>
+    </header>
+
+    <section class="card">
+      <button id="fillBtn" type="button">Fill this page</button>
+      <button id="syncBtn" type="button" class="secondary">Sync from data folder</button>
+      <button id="optionsBtn" type="button" class="secondary">Open settings / profile</button>
+      <p id="syncResult" class="hint"></p>
+    </section>
+
+    <section class="card muted">
+      <div class="row"><span>LLM</span><strong id="llmLabel">—</strong></div>
+      <div class="row"><span>Ollama</span><strong id="ollamaStatus">—</strong></div>
+      <div class="row"><span>Data folder</span><strong id="dataStatus">—</strong></div>
+      <div class="row"><span>Memory</span><strong id="memoryCount">—</strong></div>
+    </section>
+
+    <p class="footer">
+      1) Sync · 2) Open apply page · 3) Fill · 4) You submit.<br />
+      If Fill fails, refresh the tab once after reloading the extension.
+    </p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

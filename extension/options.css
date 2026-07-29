@@ -1,0 +1,130 @@
+:root {
+  --bg: #edf4f5;
+  --ink: #102a33;
+  --muted: #5a737c;
+  --card: #fbfcfc;
+  --line: #c5d5db;
+  --accent: #0f4c5c;
+  --danger: #8f1d2c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1000px 400px at 10% -10%, #cfe6e4 0%, transparent 60%),
+    radial-gradient(800px 300px at 100% 0%, #efe6d4 0%, transparent 55%),
+    var(--bg);
+}
+
+main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+header h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+header p, .help {
+  color: var(--muted);
+}
+
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 16px 0;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+label.full { margin-top: 12px; }
+
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+input, textarea, select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.actions.sticky {
+  position: sticky;
+  bottom: 12px;
+  background: rgba(251, 252, 252, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(6px);
+}
+
+button, .fileBtn {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 650;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+}
+
+button.secondary, .fileBtn.secondary {
+  background: #d7e4e8;
+  color: var(--ink);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+#saveStatus, #probeResult, #memoryInfo {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr; }
+}

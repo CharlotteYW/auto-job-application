@@ -1,0 +1,61 @@
+{
+  "id": "me",
+  "personal": {
+    "firstName": "Ada",
+    "lastName": "Lovelace",
+    "email": "ada@example.com",
+    "phone": "+1 555 0100",
+    "city": "San Francisco",
+    "state": "CA",
+    "country": "United States",
+    "linkedinUrl": "https://www.linkedin.com/in/example",
+    "githubUrl": "https://github.com/example",
+    "portfolioUrl": "https://example.dev",
+    "website": "https://example.dev"
+  },
+  "work": {
+    "currentTitle": "Software Engineer",
+    "yearsExperience": "5",
+    "summary": "Full-stack engineer focused on reliable backend systems and clean product UX.",
+    "skills": ["TypeScript", "Python", "React", "PostgreSQL", "AWS"],
+    "authorizedToWorkUS": true,
+    "needsSponsorship": false,
+    "willingToRelocate": false,
+    "preferredWorkMode": "hybrid",
+    "noticePeriodDays": "14",
+    "earliestStartDate": "2026-08-15",
+    "desiredSalary": "180000",
+    "salaryCurrency": "USD"
+  },
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "B.S.",
+      "field": "Computer Science",
+      "startYear": "2015",
+      "graduationYear": "2019",
+      "gpa": "",
+      "notes": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Example Corp",
+      "title": "Software Engineer",
+      "location": "San Francisco, CA",
+      "startDate": "2021-01",
+      "endDate": "",
+      "current": true,
+      "description": "Built APIs and product features used by millions of users."
+    }
+  ],
+  "answers": {
+    "coverLetterStyle": "concise",
+    "whyThisRole": "I want to build products that ship quickly without sacrificing reliability.",
+    "additionalInfo": ""
+  },
+  "documents": {
+    "resumeFileName": "resume.pdf",
+    "coverLetterFileName": ""
+  }
+}

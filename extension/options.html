@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Local ATS Autofill — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Local ATS Autofill</h1>
+        <p>Profile and LLM settings stay on this computer (<code>chrome.storage.local</code>).</p>
+      </header>
+
+      <section>
+        <h2>1. Profile</h2>
+        <div class="grid">
+          <label>First name <input id="firstName" /></label>
+          <label>Last name <input id="lastName" /></label>
+          <label>Email <input id="email" type="email" /></label>
+          <label>Phone <input id="phone" /></label>
+          <label>City <input id="city" /></label>
+          <label>State <input id="state" /></label>
+          <label>Country <input id="country" /></label>
+          <label>LinkedIn URL <input id="linkedinUrl" /></label>
+          <label>GitHub URL <input id="githubUrl" /></label>
+          <label>Portfolio / website <input id="portfolioUrl" /></label>
+          <label>Current title <input id="currentTitle" /></label>
+          <label>Years of experience <input id="yearsExperience" /></label>
+          <label>Desired salary <input id="desiredSalary" /></label>
+          <label>Earliest start date <input id="earliestStartDate" placeholder="YYYY-MM-DD or Immediate" /></label>
+          <label>Notice period (days) <input id="noticePeriodDays" /></label>
+          <label>Preferred work mode
+            <select id="preferredWorkMode">
+              <option value="remote">remote</option>
+              <option value="hybrid">hybrid</option>
+              <option value="onsite">onsite</option>
+            </select>
+          </label>
+          <label class="check"><input id="authorizedToWorkUS" type="checkbox" /> Authorized to work in the US</label>
+          <label class="check"><input id="needsSponsorship" type="checkbox" /> Needs visa sponsorship</label>
+          <label class="check"><input id="willingToRelocate" type="checkbox" /> Willing to relocate</label>
+          <label>School <input id="school" /></label>
+          <label>Degree <input id="degree" /></label>
+          <label>Field of study <input id="field" /></label>
+          <label>Graduation year <input id="graduationYear" /></label>
+        </div>
+        <label class="full">Skills (comma-separated)
+          <input id="skills" />
+        </label>
+        <label class="full">Professional summary
+          <textarea id="summary" rows="4"></textarea>
+        </label>
+        <label class="full">Default “why this role / cover letter” seed
+          <textarea id="whyThisRole" rows="4"></textarea>
+        </label>
+        <label class="full">Additional info
+          <textarea id="additionalInfo" rows="3"></textarea>
+        </label>
+      </section>
+
+      <section>
+        <h2>2. Data folder (source of truth)</h2>
+        <p class="help">Keep your real info in <code>data/me/</code> on disk. Run <code>npm run data-server</code>, then Sync. Later: copy to <code>data/&lt;other&gt;/</code> for more users.</p>
+        <div class="grid">
+          <label>Active user (folder name) <input id="activeUser" placeholder="me" /></label>
+          <label>Data server URL <input id="dataServerUrl" /></label>
+          <label class="check"><input id="syncOnFill" type="checkbox" /> Sync from folder before each Fill</label>
+          <label class="check"><input id="askUnknownQuestions" type="checkbox" /> Ask me about new unanswered questions</label>
+        </div>
+        <div class="actions">
+          <button type="button" id="probeData" class="secondary">Test data server</button>
+          <button type="button" id="syncData" class="secondary">Sync from data folder</button>
+          <span id="dataResult"></span>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. LLM (local by default)</h2>
+        <div class="grid">
+          <label>Provider
+            <select id="llmProvider">
+              <option value="ollama">Ollama (local)</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="off">Off (rules + memory only)</option>
+            </select>
+          </label>
+          <label>Ollama base URL <input id="ollamaBaseUrl" /></label>
+          <label>Ollama model <input id="ollamaModel" placeholder="llama3.1:8b" /></label>
+          <label>OpenAI API key <input id="openaiApiKey" type="password" autocomplete="off" /></label>
+          <label>OpenAI model <input id="openaiModel" /></label>
+          <label>Anthropic API key <input id="anthropicApiKey" type="password" autocomplete="off" /></label>
+          <label>Anthropic model <input id="anthropicModel" /></label>
+          <label class="check"><input id="useCursorBridge" type="checkbox" /> Use Cursor SDK local bridge for hard questions</label>
+          <label>Cursor bridge URL <input id="cursorBridgeUrl" /></label>
+        </div>
+        <div class="actions">
+          <button type="button" id="probeOllama" class="secondary">Test Ollama</button>
+          <span id="probeResult"></span>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. Memory</h2>
+        <p class="help">Answers the LLM fills (and ones you teach) are reused when similar questions appear.</p>
+        <div class="actions">
+          <button type="button" id="clearMemory" class="danger">Clear answer memory</button>
+          <span id="memoryInfo"></span>
+        </div>
+      </section>
+
+      <div class="actions sticky">
+        <button type="button" id="saveBtn">Save</button>
+        <button type="button" id="exportBtn" class="secondary">Export JSON</button>
+        <label class="fileBtn secondary">Import JSON <input id="importFile" type="file" accept="application/json,.json" hidden /></label>
+        <span id="saveStatus"></span>
+      </div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

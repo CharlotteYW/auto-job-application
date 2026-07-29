@@ -1,0 +1,11 @@
+把你的简历文件放到这个文件夹，并命名为：
+
+  resume.pdf
+
+也支持：resume.docx / cv.pdf（在 profile.json 的 documents.resumeFileName 里改文件名）。
+
+然后启动 data-server：
+
+  npm run data-server
+
+扩展填表时会自动下载并上传到申请页的 Resume/CV 文件框。
