@@ -18,7 +18,7 @@ This project uses **Manifest V3**.
 |-------|---------|--------------|
 | Manifest | `extension/manifest.json` | Permissions + wiring |
 | Service worker | `extension/background.js` | Invisible background brain: storage + Ollama calls |
-| Content script | `extension/content/*` | Runs **inside** the job application page; scans/fills DOM |
+| Content script | `extension/page/autofill.js` | Runs **inside** the job application page; scans/fills DOM |
 | Popup | `extension/popup.*` | Small UI when you click the toolbar icon |
 | Options | `extension/options.*` | Full settings page for your profile |
 
