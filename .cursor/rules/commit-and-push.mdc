@@ -1,0 +1,13 @@
+---
+description: Commit and push after every meaningful change
+alwaysApply: true
+---
+
+# Git hygiene for this repo
+
+After any meaningful code or docs change in this repository:
+
+1. Create a git commit with a clear message (why over what).
+2. Push to `origin` on the current branch (`git push -u origin HEAD` if needed).
+3. Never commit personal secrets: `data/*/profile.json`, `data/*/answers.json`, resumes (`*.pdf`), `.env`, or API keys.
+4. Prefer small, frequent commits over large batched ones.
