@@ -114,9 +114,23 @@ docs/                # beginner Chrome extension guide
 
 ## Limitations
 
-- Some ATS use custom upload widgets; if auto-upload fails, upload once manually and tell me the site
+- Some ATS use custom upload widgets; if auto-upload fails, upload once manually
 - Workday-specific widgets still TODO
 - LLM will leave blanks rather than invent facts
+
+## Troubleshooting
+
+### `content/content.js` import / stack trace errors
+
+That file is no longer the real content script (we use `content/main-classic.js`).
+If Chrome still shows an error about `content/content.js` imports:
+
+1. Open `chrome://extensions`
+2. **Remove** Local ATS Autofill (do not only click Reload)
+3. **Load unpacked** again and select the `extension/` folder
+4. Hard-refresh the job application tab (`Cmd+R`)
+
+Confirm the extension version is **0.1.7** or newer on the extensions page.
 
 ---
 
