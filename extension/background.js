@@ -149,7 +149,7 @@ async function callOllama(settings, prompt) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: settings.ollamaModel || "llama3.1:8b",
+      model: settings.ollamaModel || "gemma4:31b",
       stream: false,
       format: "json",
       options: { temperature: 0.1 },

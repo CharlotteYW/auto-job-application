@@ -86,7 +86,7 @@ async function refresh() {
   const probe = await chrome.runtime.sendMessage({ type: "PROBE_OLLAMA" });
   const ollamaEl = document.getElementById("ollamaStatus");
   if (probe?.ok) {
-    const model = state?.settings?.ollamaModel || "llama3.1:8b";
+    const model = state?.settings?.ollamaModel || "gemma4:31b";
     const has = (probe.models || []).includes(model);
     ollamaEl.textContent = has ? `ok (${model})` : `ok — pull ${model}`;
     ollamaEl.style.color = has ? "#1b7f4e" : "#c98500";

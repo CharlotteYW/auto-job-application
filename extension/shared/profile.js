@@ -46,7 +46,7 @@ export const DEFAULT_PROFILE = {
 
 export const DEFAULT_SETTINGS = {
   ollamaBaseUrl: "http://127.0.0.1:11434",
-  ollamaModel: "llama3.1:8b",
+  ollamaModel: "gemma4:31b",
   llmProvider: "ollama",
   openaiApiKey: "",
   openaiModel: "gpt-4o-mini",
@@ -80,7 +80,12 @@ export function normalizeProfile(raw = {}) {
 }
 
 export function normalizeSettings(raw = {}) {
-  return { ...DEFAULT_SETTINGS, ...(raw || {}) };
+  const s = { ...DEFAULT_SETTINGS, ...(raw || {}) };
+  // Migrate previous default so existing installs pick up gemma4:31b
+  if (!raw?.ollamaModel || raw.ollamaModel === "llama3.1:8b") {
+    s.ollamaModel = DEFAULT_SETTINGS.ollamaModel;
+  }
+  return s;
 }
 
 function deepMerge(base, override) {

@@ -48,9 +48,13 @@ Leave this terminal open. It listens on `http://127.0.0.1:3848`.
 
 ```bash
 ollama serve
-# model example:
-ollama pull llama3.1:8b
+# recommended default (good on ~64GB RAM machines):
+ollama pull gemma4:31b
+# faster alternative on the same hardware:
+# ollama pull gemma4:26b
 ```
+
+In extension Settings, Ollama model should be `gemma4:31b` (this is now the default).
 
 ### 4. Install / reload the Chrome extension
 
